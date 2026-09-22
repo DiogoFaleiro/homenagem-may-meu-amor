@@ -177,9 +177,12 @@ function quadroFinal(agoraMs) {
     if (p.a <= 0) return;
     let x = p.x, y = p.y; if (esc !== 1) { x = cx + (x - cx) * esc; y = H * .45 + (y - H * .45) * esc }
     const eTexto = fase === 'iniciais' || fase === 'amor';
-    const tw = .65 + .35 * Math.sin(agora * 3 + p.f), s = (eTexto ? 5.5 : 8) * tw * (fase === 'coracao' ? 1 + (esc - 1) * 3 : 1);
-    const nucleo = eTexto ? 1.6 : 1.2;
-    fx.globalAlpha = Math.max(0, p.a) * .8; fx.drawImage(sprite, x - s / 2, y - s / 2, s, s);
+    const tw = .65 + .35 * Math.sin(agora * 3 + p.f), s = (eTexto ? 6.5 : 8) * tw * (fase === 'coracao' ? 1 + (esc - 1) * 3 : 1);
+    const nucleo = eTexto ? 1.8 : 1.2;
+    // nas fases de texto (iniciais/amor), cada ponto brilha com a mesma força
+    // cheia da estrelinha do final (sem o apagamento *.8) — fica mais nítido
+    // e mais "estrela de verdade", em vez de poeira fraca.
+    fx.globalAlpha = Math.max(0, p.a) * (eTexto ? 1 : .8); fx.drawImage(sprite, x - s / 2, y - s / 2, s, s);
     fx.globalAlpha = Math.max(0, p.a); fx.fillStyle = '#fff3d6'; fx.fillRect(x - nucleo / 2, y - nucleo / 2, nucleo, nucleo);
   });
   fx.globalAlpha = 1;
