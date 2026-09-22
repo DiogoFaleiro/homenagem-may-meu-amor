@@ -9,6 +9,7 @@ import { reduz, sprite, viewport } from './compartilhado.js';
 import { apagarFundo, definirEmFinal } from './cerebro.js';
 import { pararSuave, reiniciarMusica } from './musica.js';
 import { ir } from './paginas.js';
+import { carregar as carregarCasal3D, estaPronto as casal3DPronto, desenharCasal3D, obterCanvas as obterCanvas3D } from './casal3d.js';
 
 let emFinal = false;
 const fim = document.getElementById('fim'), fx = fim.getContext('2d'), btnDeNovo = document.getElementById('denovo');
@@ -93,8 +94,21 @@ function morfar(alvos, dur) {
 
 export function estaNoFinal() { return emFinal; }
 
+// Usa o casal 3D assim que estiver pronto (carregado por iniciarFinal); se não
+// carregou a tempo (ou falhou), cai pro desenho 2D original sem quebrar nada.
+function desenharCasalAtivo(t) {
+  if (casal3DPronto()) {
+    const W = viewport.W, H = viewport.H, r = desenharCasal3D(t, W, H, fD);
+    sx.setTransform(fD, 0, 0, fD, 0, 0); sx.clearRect(0, 0, W, H);
+    sx.drawImage(obterCanvas3D(), 0, 0, W, H);
+    return r;
+  }
+  return desenharCasal(t);
+}
+
 export function iniciarFinal() {
   if (emFinal) return; emFinal = true;
+  carregarCasal3D(); // dispara o carregamento do Three.js já de cara, pra estar pronto quando o casal aparecer
   apagarFundo(); definirEmFinal(true); document.body.classList.add('final-on');
   redimFim(); fim.classList.add('on');
   parts = []; fase = 'casal'; flash = 0; estrela = 0; batidasVibradas = 0;
@@ -118,7 +132,7 @@ function quadroFinal(agoraMs) {
   }
 
   if (t < 7.4) {
-    const { h, chao } = desenharCasal(t);
+    const { h, chao } = desenharCasalAtivo(t);
     const aSil = cl((t - .6) / 1) * (1 - cl((t - 6.9) / .5));
     fx.save(); fx.globalAlpha = aSil;
     const lg = fx.createLinearGradient(0, chao, W, chao); lg.addColorStop(0, 'rgba(244,199,106,0)'); lg.addColorStop(.5, `rgba(244,199,106,${.5})`); lg.addColorStop(1, 'rgba(244,199,106,0)');
