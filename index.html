@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#160b1d">
+<title>Para Maynara</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Mulish:wght@300;400&family=Parisienne&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<canvas id="ceu" aria-hidden="true"></canvas>
+
+<main class="palco" id="palco" aria-live="polite">
+
+  <section class="slide" data-luz=".04" data-foco="none" data-lay="intro">
+    <div class="conteudo">
+      <h1 data-r>Oi, lindinha.</h1>
+      <p data-r>Fiz isso pra te contar um segredo do meu cérebro.</p>
+      <div class="dica bloco"><span>toca na tela</span></div>
+    </div>
+  </section>
+
+  <section class="slide" data-luz=".2" data-foco="memoria" data-lay="texto">
+    <div class="conteudo">
+      <h2 data-r>Sabia que o cérebro guarda os momentos felizes?</h2>
+      <p data-r>E toda vez que a gente lembra, ele solta dopamina de novo. A gente sente tudo outra vez.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-luz=".45" data-foco="recompensa" data-lay="texto">
+    <div class="conteudo">
+      <h2 data-r>O meu tem uma reserva só pra isso.</h2>
+      <p data-r>E ela tem nome:</p>
+      <div class="nome" data-r data-vel=".13">Maynara</div>
+    </div>
+  </section>
+
+  <section class="slide com-foto" data-luz=".6" data-foco="olfato" data-lay="foto">
+    <div class="fotos bloco" data-fotos="0"></div>
+    <div class="conteudo">
+      <h2 data-r>Seu cheirinho</h2>
+      <p data-r>Ele tem um atalho direto pra minha memória. Basta um sopro e eu tô pertinho de você de novo.</p>
+    </div>
+  </section>
+
+  <section class="slide com-foto" data-luz=".75" data-foco="toque" data-lay="foto">
+    <div class="fotos duas bloco" data-fotos="1,2"></div>
+    <div class="conteudo">
+      <h2 data-r>Seu abraço apertado. Sua mão na minha.</h2>
+      <p data-r>Meu cérebro entende na hora: aqui é casa.</p>
+    </div>
+  </section>
+
+  <section class="slide com-foto" data-luz=".9" data-foco="tudo" data-lay="foto">
+    <div class="fotos bloco" data-fotos="3"></div>
+    <div class="conteudo">
+      <h2 data-r>Seus beijos, fofinha…</h2>
+      <p data-r>Cada um ficou guardado aqui dentro. Brilhando.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-luz="1" data-foco="tudo" data-lay="texto" data-medidor>
+    <div class="conteudo">
+      <h2 data-r>Minha reserva de dopamina</h2>
+      <div class="medidor bloco" data-marca>
+        <div class="trilho"><div class="enchimento" id="enchimento"></div></div>
+        <div class="leitura"><span>nível agora</span><strong id="percentual">0%</strong></div>
+      </div>
+      <div class="transborda" id="transborda"></div>
+    </div>
+  </section>
+
+  <section class="slide" data-luz="1" data-foco="final" data-lay="final">
+    <div class="conteudo">
+      <h2 data-r>Obrigado por ser as minhas melhores memórias.</h2>
+      <p data-r>Quando a saudade aperta, eu fecho os olhos e te encontro. E pronto, fico feliz de novo.</p>
+      <div class="nome" data-r data-vel=".11">Te amo</div>
+      <div class="assin" data-r data-vel=".08">Diogo</div>
+    </div>
+  </section>
+
+</main>
+
+<canvas id="fim" aria-hidden="true"></canvas>
+<button class="denovo" id="denovo">Ver de novo</button>
+<button class="som" id="som" aria-label="Pausar música"><span class="barras"><i></i><i></i><i></i></span></button>
+<audio id="musica" preload="auto" src="assets/musica.mp3"></audio>
+
+<nav class="nav" aria-label="Navegação">
+  <button id="voltar" aria-label="Voltar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+  <div class="pontos" id="pontos"></div>
+  <button id="avancar" aria-label="Avançar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+</nav>
+
+<script type="module" src="js/principal.js"></script>
+</body>
+</html>
