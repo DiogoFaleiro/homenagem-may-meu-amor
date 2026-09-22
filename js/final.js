@@ -1,4 +1,13 @@
-/* Grand finale: casal em silhueta -> partículas -> "M & D" -> coração -> brilho.
+/* Grand finale: casal em partículas -> iniciais -> coração pulsando -> "Te amo
+   para sempre" -> brilho.
+
+   O casal nunca é desenhado como corpo sólido (isso é o que ficava esquisito).
+   homem()/mulher()/desenharCasal() continuam existindo e com a mesma coreografia
+   de sempre (caminhada, balanço, abraço), mas agora servem só de molde invisível:
+   a cada ~90ms redesenha o casal num canvas offscreen e amostra pontos da
+   silhueta pra virarem partículas, que perseguem esse alvo com um lerp suave.
+   Isso já é a mesma estética de poeira que o resto do final usa (iniciais,
+   coração), então o casal "chegando andando em poeira" encaixa com tudo.
 
    Import circular intencional com paginas.js: paginas.js chama iniciarFinal()/estaNoFinal()
    daqui, e este arquivo chama ir() de lá (no clique de "Ver de novo"). Funciona porque as
@@ -9,12 +18,14 @@ import { reduz, sprite, viewport } from './compartilhado.js';
 import { apagarFundo, definirEmFinal } from './cerebro.js';
 import { pararSuave, reiniciarMusica } from './musica.js';
 import { ir } from './paginas.js';
-import { carregar as carregarCasal3D, estaPronto as casal3DPronto, desenharCasal3D, obterCanvas as obterCanvas3D } from './casal3d.js';
+
+// fronteiras das fases, em segundos desde o início do final (ajustadas visualmente)
+const T_INICIAIS = 6.8, T_CORACAO = 10.8, T_AMOR = 16.4, T_BRILHO = 20.5;
 
 let emFinal = false;
 const fim = document.getElementById('fim'), fx = fim.getContext('2d'), btnDeNovo = document.getElementById('denovo');
 const sil = document.createElement('canvas'), sx = sil.getContext('2d');
-let fD = 1, fT0 = 0, parts = [], fase = '', flash = 0, estrela = 0, batidasVibradas = 0, raf = null;
+let fD = 1, fT0 = 0, parts = [], fase = '', flash = 0, estrela = 0, batidasVibradas = 0, raf = null, proximaAmostra = 0;
 function redimFim() { fD = Math.min(2, devicePixelRatio || 1); fim.width = sil.width = viewport.W * fD; fim.height = sil.height = viewport.H * fD }
 const ease = k => k < .5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2, cl = v => Math.max(0, Math.min(1, v));
 function limb(c, x1, y1, x2, y2, w) { c.lineWidth = w; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke() }
@@ -62,18 +73,18 @@ function desenharCasal(t) {
   homem(sx, xD, chao + bob, h, -sw, emb, -.05 * emb);
   return { h, chao, cx };
 }
-function amostrarSil(n) {
+function amostrarSilhueta() {
   const d = sx.getImageData(0, 0, sil.width, sil.height).data, pts = [], st = Math.max(1, Math.round(2 * fD));
   for (let y = 0; y < sil.height; y += st) for (let x = 0; x < sil.width; x += st) if (d[(y * sil.width + x) * 4 + 3] > 120) pts.push({ x: x / fD, y: y / fD });
-  return escolher(pts, n);
+  return pts;
 }
 function escolher(pts, n) { const r = []; for (let i = 0; i < n; i++) r.push(pts[(Math.random() * pts.length) | 0] || { x: viewport.W / 2, y: viewport.H / 2 }); return r }
-function pontosTexto(n) {
+function pontosTexto(n, texto) {
   const W = viewport.W, H = viewport.H;
   const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
-  let fs = 150; g.font = `${fs}px Parisienne, "Snell Roundhand", cursive`; const w = g.measureText('M & D').width;
+  let fs = 150; g.font = `${fs}px Parisienne, "Snell Roundhand", cursive`; const w = g.measureText(texto).width;
   fs = Math.min(fs * (W * .82) / w, fs * 1.4); g.font = `${fs}px Parisienne, "Snell Roundhand", cursive`;
-  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText('M & D', W / 2, H * .45);
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(texto, W / 2, H * .45);
   const d = g.getImageData(0, 0, W, H).data, pts = [];
   for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) if (d[(y * W + x) * 4 + 3] > 130) pts.push({ x, y });
   return escolher(pts, n);
@@ -94,24 +105,27 @@ function morfar(alvos, dur) {
 
 export function estaNoFinal() { return emFinal; }
 
-// Usa o casal 3D assim que estiver pronto (carregado por iniciarFinal); se não
-// carregou a tempo (ou falhou), cai pro desenho 2D original sem quebrar nada.
-function desenharCasalAtivo(t) {
-  if (casal3DPronto()) {
-    const W = viewport.W, H = viewport.H, r = desenharCasal3D(t, W, H, fD);
-    sx.setTransform(fD, 0, 0, fD, 0, 0); sx.clearRect(0, 0, W, H);
-    sx.drawImage(obterCanvas3D(), 0, 0, W, H);
-    return r;
+// Redesenha o casal (molde invisível) e reamostra a nuvem de partículas que o
+// persegue. Chamado a cada ~90ms durante a fase 'casal', não a cada quadro —
+// getImageData custa caro demais pra rodar a 60fps o tempo todo.
+function atualizarCasalEmParticulas(t) {
+  desenharCasal(t);
+  const bruto = amostrarSilhueta();
+  if (bruto.length < 40) return; // casal ainda todo fora da tela (começo da caminhada) — espera ter silhueta real
+  const alvo = escolher(bruto, reduz ? 600 : 1300);
+  if (!parts.length) {
+    parts = alvo.map(p => ({ x: p.x, y: p.y, tx: p.x, ty: p.y, ox: p.x, oy: p.y, t0: 0, dur: 1, curva: 0, f: Math.random() * 6.28, vx: 0, vy: 0, a: 1 }));
+    return;
   }
-  return desenharCasal(t);
+  const idx = alvo.map((_, i) => i).sort(() => Math.random() - .5);
+  parts.forEach((p, i) => { const a = alvo[idx[i]]; if (a) { p.tx = a.x; p.ty = a.y } });
 }
 
 export function iniciarFinal() {
   if (emFinal) return; emFinal = true;
-  carregarCasal3D(); // dispara o carregamento do Three.js já de cara, pra estar pronto quando o casal aparecer
   apagarFundo(); definirEmFinal(true); document.body.classList.add('final-on');
   redimFim(); fim.classList.add('on');
-  parts = []; fase = 'casal'; flash = 0; estrela = 0; batidasVibradas = 0;
+  parts = []; fase = 'casal'; flash = 0; estrela = 0; batidasVibradas = 0; proximaAmostra = 0;
   fT0 = performance.now() / 1000;
   document.fonts && document.fonts.load('150px Parisienne');
   cancelAnimationFrame(raf); raf = requestAnimationFrame(quadroFinal);
@@ -123,32 +137,22 @@ function quadroFinal(agoraMs) {
   const agora = agoraMs / 1000, t = agora - fT0, cx = W / 2;
   fx.setTransform(fD, 0, 0, fD, 0, 0); fx.clearRect(0, 0, W, H);
 
-  // luz de fundo (contraluz do casal)
-  const luz = cl((t - .3) / 2) * (1 - cl((t - 16.6) / 1.5));
+  // luz de fundo (contraluz do casal), some pouco antes do estouro final
+  const luz = cl((t - .3) / 2) * (1 - cl((t - (T_BRILHO - .6)) / 1.5));
   if (luz > 0) {
     const r = Math.min(W, H) * (.55 + .1 * cl((t - 5) / 2)), g = fx.createRadialGradient(cx, H * .45, 0, cx, H * .45, r);
     g.addColorStop(0, `rgba(244,199,106,${.28 * luz})`); g.addColorStop(.5, `rgba(255,123,176,${.12 * luz})`); g.addColorStop(1, 'rgba(255,123,176,0)');
     fx.fillStyle = g; fx.fillRect(0, 0, W, H)
   }
 
-  if (t < 7.4) {
-    const { h, chao } = desenharCasalAtivo(t);
-    const aSil = cl((t - .6) / 1) * (1 - cl((t - 6.9) / .5));
-    fx.save(); fx.globalAlpha = aSil;
-    const lg = fx.createLinearGradient(0, chao, W, chao); lg.addColorStop(0, 'rgba(244,199,106,0)'); lg.addColorStop(.5, `rgba(244,199,106,${.5})`); lg.addColorStop(1, 'rgba(244,199,106,0)');
-    fx.fillStyle = lg; fx.fillRect(0, chao - 1, W, 1.5);
-    fx.shadowColor = 'rgba(244,199,106,.85)'; fx.shadowBlur = 26 * fD; fx.drawImage(sil, 0, 0, W, H);
-    fx.shadowColor = 'rgba(255,123,176,.6)'; fx.shadowBlur = 8 * fD; fx.drawImage(sil, 0, 0, W, H);
-    fx.restore();
+  if (fase === 'casal' && agora >= proximaAmostra) {
+    proximaAmostra = agora + .09;
+    atualizarCasalEmParticulas(t);
   }
-  if (t >= 6.8 && fase === 'casal') {
-    fase = 'po'; const pts = amostrarSil(reduz ? 600 : 1300);
-    parts = pts.map(p => ({ x: p.x, y: p.y, ox: p.x, oy: p.y, tx: p.x, ty: p.y, t0: 0, dur: 1, curva: 0, f: Math.random() * 6.28, vx: 0, vy: 0, a: 1 }));
-    flash = .35;
-  }
-  if (t >= 7.6 && fase === 'po') { fase = 'letras'; morfar(pontosTexto(parts.length), 2) }
-  if (t >= 11.6 && fase === 'letras') { fase = 'coracao'; morfar(pontosCoracao(parts.length), 1.8) }
-  if (t >= 17.2 && fase === 'coracao') {
+  if (t >= T_INICIAIS && fase === 'casal') { fase = 'iniciais'; morfar(pontosTexto(parts.length, 'M & D'), 2); flash = .35 }
+  if (t >= T_CORACAO && fase === 'iniciais') { fase = 'coracao'; morfar(pontosCoracao(parts.length), 1.8) }
+  if (t >= T_AMOR && fase === 'coracao') { fase = 'amor'; morfar(pontosTexto(parts.length, 'Te amo para sempre'), 1.8) }
+  if (t >= T_BRILHO && fase === 'amor') {
     fase = 'brilho'; flash = 1; navigator.vibrate && navigator.vibrate(80);
     parts.forEach(p => { const dx = p.x - cx, dy = p.y - H * .45, d = Math.hypot(dx, dy) || 1, v = 2 + Math.random() * 7; p.vx = dx / d * v + (Math.random() - .5) * 2; p.vy = dy / d * v + (Math.random() - .5) * 2 });
     pararSuave(5500);
@@ -156,8 +160,8 @@ function quadroFinal(agoraMs) {
 
   // batidas do coração (tum-tum) x3
   let esc = 1;
-  if (fase === 'coracao' && t > 13.6) {
-    const k = (t - 13.6) % 1.15, n = Math.floor((t - 13.6) / 1.15);
+  if (fase === 'coracao' && t > T_CORACAO + 2) {
+    const k = (t - (T_CORACAO + 2)) % 1.15, n = Math.floor((t - (T_CORACAO + 2)) / 1.15);
     if (n < 3) {
       esc = 1 + .13 * Math.exp(-((k - .08) ** 2) / .003) + .08 * Math.exp(-((k - .34) ** 2) / .003);
       if (n >= batidasVibradas) { batidasVibradas = n + 1; navigator.vibrate && navigator.vibrate([45, 160, 35]) }
@@ -165,7 +169,8 @@ function quadroFinal(agoraMs) {
   }
 
   parts.forEach(p => {
-    if (fase === 'brilho') { p.x += p.vx; p.y += p.vy; p.vx *= .985; p.vy *= .985; p.vy += .012; p.a -= .0075 }
+    if (fase === 'casal') { p.x += (p.tx - p.x) * .15; p.y += (p.ty - p.y) * .15 }
+    else if (fase === 'brilho') { p.x += p.vx; p.y += p.vy; p.vx *= .985; p.vy *= .985; p.vy += .012; p.a -= .0075 }
     else if (p.t0) {
       const k = ease(cl((agora - p.t0) / p.dur)), mx = p.ox + (p.tx - p.ox) * k, my = p.oy + (p.ty - p.oy) * k, ondula = Math.sin(k * Math.PI) * p.curva;
       const dx = p.tx - p.ox, dy = p.ty - p.oy, L = Math.hypot(dx, dy) || 1; p.x = mx - dy / L * ondula; p.y = my + dx / L * ondula
@@ -184,9 +189,9 @@ function quadroFinal(agoraMs) {
   }
 
   if (fase === 'brilho') { // estrelinha que fica
-    estrela = cl((t - 18.2) / 1.2) * (1 - cl((t - 22) / 2.5));
+    estrela = cl((t - (T_BRILHO + 1)) / 1.2) * (1 - cl((t - (T_BRILHO + 4.8)) / 2.5));
     if (estrela > 0) { const s = 22 * (.8 + .2 * Math.sin(agora * 4)); fx.globalAlpha = estrela; fx.drawImage(sprite, cx - s / 2, H * .45 - s / 2, s, s); fx.globalAlpha = 1 }
-    if (t > 20.5) btnDeNovo.classList.add('on');
+    if (t > T_BRILHO + 3.3) btnDeNovo.classList.add('on');
   }
   raf = requestAnimationFrame(quadroFinal);
 }
