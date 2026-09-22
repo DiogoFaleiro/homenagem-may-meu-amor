@@ -12,7 +12,7 @@ function fade(alvo, ms, depois) {
   const id = ++fadeId, ini = musica.volume, t = performance.now();
   (function passo(agora) {
     if (id !== fadeId) return; // um fade mais novo assumiu o controle
-    const k = Math.min(1, (agora - t) / ms); musica.volume = ini + (alvo - ini) * k;
+    const k = Math.min(1, (agora - t) / ms); musica.volume = Math.max(0, Math.min(1, ini + (alvo - ini) * k));
     if (k < 1) requestAnimationFrame(passo); else depois && depois();
   })(t);
 }

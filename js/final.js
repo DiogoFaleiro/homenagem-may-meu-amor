@@ -73,18 +73,49 @@ function desenharCasal(t) {
   homem(sx, xD, chao + bob, h, -sw, emb, -.05 * emb);
   return { h, chao, cx };
 }
+// Separa os pixels opacos da silhueta em "borda" (tem vizinho transparente
+// pertinho) e "interior". Sem isso, uma silhueta preenchida amostrada por
+// igual vira uma mancha difusa — dar mais peso à borda deixa o contorno de
+// duas pessoas reconhecível, mesmo em movimento numa tela pequena.
 function amostrarSilhueta() {
-  const d = sx.getImageData(0, 0, sil.width, sil.height).data, pts = [], st = Math.max(1, Math.round(2 * fD));
-  for (let y = 0; y < sil.height; y += st) for (let x = 0; x < sil.width; x += st) if (d[(y * sil.width + x) * 4 + 3] > 120) pts.push({ x: x / fD, y: y / fD });
-  return pts;
+  const d = sx.getImageData(0, 0, sil.width, sil.height).data, largura = sil.width, altura = sil.height;
+  const st = Math.max(1, Math.round(2 * fD)), margem = Math.max(2, Math.round(4 * fD));
+  const alfa = (x, y) => (x < 0 || y < 0 || x >= largura || y >= altura) ? 0 : d[(y * largura + x) * 4 + 3];
+  const borda = [], interior = [];
+  for (let y = 0; y < altura; y += st) {
+    for (let x = 0; x < largura; x += st) {
+      if (alfa(x, y) <= 120) continue;
+      const ponto = { x: x / fD, y: y / fD };
+      const ehBorda = alfa(x - margem, y) <= 120 || alfa(x + margem, y) <= 120 || alfa(x, y - margem) <= 120 || alfa(x, y + margem) <= 120;
+      (ehBorda ? borda : interior).push(ponto);
+    }
+  }
+  return { borda, interior };
 }
 function escolher(pts, n) { const r = []; for (let i = 0; i < n; i++) r.push(pts[(Math.random() * pts.length) | 0] || { x: viewport.W / 2, y: viewport.H / 2 }); return r }
+// Sorteia n pontos priorizando a borda (fracaoBorda de chance por partícula),
+// caindo pro interior (ou vice-versa) quando um dos dois está vazio.
+function escolherComPeso(borda, interior, n, fracaoBorda) {
+  const r = [];
+  for (let i = 0; i < n; i++) {
+    const usarBorda = Math.random() < fracaoBorda ? borda.length > 0 : !(interior.length > 0);
+    const pool = usarBorda ? borda : interior;
+    r.push(pool.length ? pool[(Math.random() * pool.length) | 0] : { x: viewport.W / 2, y: viewport.H / 2 });
+  }
+  return r;
+}
+// texto pode ser uma string (uma linha) ou um array de linhas — quebrar frases
+// longas em 2 linhas deixa a fonte bem maior (o auto-fit é pela linha mais
+// larga, não pela frase inteira), o que é o que mais ajuda a legibilidade.
 function pontosTexto(n, texto) {
-  const W = viewport.W, H = viewport.H;
+  const W = viewport.W, H = viewport.H, linhas = Array.isArray(texto) ? texto : [texto];
   const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
-  let fs = 150; g.font = `${fs}px Parisienne, "Snell Roundhand", cursive`; const w = g.measureText(texto).width;
-  fs = Math.min(fs * (W * .82) / w, fs * 1.4); g.font = `${fs}px Parisienne, "Snell Roundhand", cursive`;
-  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(texto, W / 2, H * .45);
+  let fs = 150; g.font = `${fs}px Parisienne, "Snell Roundhand", cursive`;
+  const maiorLargura = Math.max(...linhas.map(l => g.measureText(l).width));
+  fs = Math.min(fs * (W * .82) / maiorLargura, fs * 1.4); g.font = `${fs}px Parisienne, "Snell Roundhand", cursive`;
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff';
+  const alturaLinha = fs * .92, topo = H * .45 - alturaLinha * (linhas.length - 1) / 2;
+  linhas.forEach((l, i) => g.fillText(l, W / 2, topo + i * alturaLinha));
   const d = g.getImageData(0, 0, W, H).data, pts = [];
   for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) if (d[(y * W + x) * 4 + 3] > 130) pts.push({ x, y });
   return escolher(pts, n);
@@ -110,9 +141,9 @@ export function estaNoFinal() { return emFinal; }
 // getImageData custa caro demais pra rodar a 60fps o tempo todo.
 function atualizarCasalEmParticulas(t) {
   desenharCasal(t);
-  const bruto = amostrarSilhueta();
-  if (bruto.length < 40) return; // casal ainda todo fora da tela (começo da caminhada) — espera ter silhueta real
-  const alvo = escolher(bruto, reduz ? 600 : 1300);
+  const { borda, interior } = amostrarSilhueta();
+  if (borda.length + interior.length < 40) return; // casal ainda todo fora da tela (começo da caminhada) — espera ter silhueta real
+  const alvo = escolherComPeso(borda, interior, reduz ? 600 : 1300, .72);
   if (!parts.length) {
     parts = alvo.map(p => ({ x: p.x, y: p.y, tx: p.x, ty: p.y, ox: p.x, oy: p.y, t0: 0, dur: 1, curva: 0, f: Math.random() * 6.28, vx: 0, vy: 0, a: 1 }));
     return;
@@ -151,7 +182,7 @@ function quadroFinal(agoraMs) {
   }
   if (t >= T_INICIAIS && fase === 'casal') { fase = 'iniciais'; morfar(pontosTexto(parts.length, 'M & D'), 2); flash = .35 }
   if (t >= T_CORACAO && fase === 'iniciais') { fase = 'coracao'; morfar(pontosCoracao(parts.length), 1.8) }
-  if (t >= T_AMOR && fase === 'coracao') { fase = 'amor'; morfar(pontosTexto(parts.length, 'Te amo para sempre'), 1.8) }
+  if (t >= T_AMOR && fase === 'coracao') { fase = 'amor'; morfar(pontosTexto(parts.length, ['Te amo', 'para sempre']), 1.8) }
   if (t >= T_BRILHO && fase === 'amor') {
     fase = 'brilho'; flash = 1; navigator.vibrate && navigator.vibrate(80);
     parts.forEach(p => { const dx = p.x - cx, dy = p.y - H * .45, d = Math.hypot(dx, dy) || 1, v = 2 + Math.random() * 7; p.vx = dx / d * v + (Math.random() - .5) * 2; p.vy = dy / d * v + (Math.random() - .5) * 2 });
@@ -177,9 +208,12 @@ function quadroFinal(agoraMs) {
     }
     if (p.a <= 0) return;
     let x = p.x, y = p.y; if (esc !== 1) { x = cx + (x - cx) * esc; y = H * .45 + (y - H * .45) * esc }
-    const tw = .65 + .35 * Math.sin(agora * 3 + p.f), s = 8 * tw * (fase === 'coracao' ? 1 + (esc - 1) * 3 : 1);
+    const eTexto = fase === 'iniciais' || fase === 'amor';
+    const base = eTexto ? 5.5 : fase === 'casal' ? 6 : 8;
+    const tw = .65 + .35 * Math.sin(agora * 3 + p.f), s = base * tw * (fase === 'coracao' ? 1 + (esc - 1) * 3 : 1);
+    const nucleo = eTexto || fase === 'casal' ? 1.6 : 1.2;
     fx.globalAlpha = Math.max(0, p.a) * .8; fx.drawImage(sprite, x - s / 2, y - s / 2, s, s);
-    fx.globalAlpha = Math.max(0, p.a); fx.fillStyle = '#fff3d6'; fx.fillRect(x - .6, y - .6, 1.2, 1.2);
+    fx.globalAlpha = Math.max(0, p.a); fx.fillStyle = '#fff3d6'; fx.fillRect(x - nucleo / 2, y - nucleo / 2, nucleo, nucleo);
   });
   fx.globalAlpha = 1;
 
